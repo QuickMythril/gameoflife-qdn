@@ -6,7 +6,7 @@
   <style>
     body {
       margin: 0;
-      
+      background: #000000;
     }
 
     canvas {
@@ -47,11 +47,42 @@
       right: 0;
       border-bottom-left-radius: 2px;
     }
+
+    .controls {
+      position: fixed;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(250, 250, 250, 0.8);
+      padding: 10px;
+      border-radius: 5px;
+    }
+
+    .controls button {
+      margin-right: 10px;
+    }
+
   </style>
 </head>
 <body>
-    <a href='info.html'>info</a>
     <canvas id="big-canvas"></canvas>
+
+    <div class="controls">
+        <a href='info.html'>info</a>
+        <button id="pauseButton">Stop</button>
+        <button id="stepButton">Step</button>
+        <button id="resetButton">Reset</button>
+        <button id="randomButton">Random</button>
+        <input type="range" id="speedInput" min="100" max="2000" value="1200" step="100">
+        <select id="colorThemeSelect">
+            <option value="colorOnBlack">Color (Dark)</option>
+            <option value="colorOnWhite">Color (Light)</option>
+            <option value="whiteOnBlack">Mono (Dark)</option>
+            <option value="blackOnWhite">Mono (Light)</option>
+        </select>
+        <input type="checkbox" id="wrapCheckbox" checked>
+        <label for="wrapCheckbox">Wrap</label>
+    </div>
 
     <script>
 
@@ -119,14 +150,29 @@
             return nextBoard;
         }
 
-        function render(board, context) {
+        function render(board, context, colorTheme) {
             const height = board.getHeight();
             const width = board.getWidth();
 
             for (let y = 0; y < height; y++) {
                 for (let x = 0; x < width; x++) {
                     const color = board.getColor(x, y);
+            switch (colorTheme) {
+                case 'colorOnWhite':
                     context.fillStyle = color ? color.toString() : "#fafafa";
+                    break;
+                case 'colorOnBlack':
+                    context.fillStyle = color ? color.toString() : "#000";
+                    break;
+                case 'blackOnWhite':
+                    context.fillStyle = color ? "#000" : "#fff";
+                    break;
+                case 'whiteOnBlack':
+                    context.fillStyle = color ? "#fff" : "#000";
+                    break;
+                default:
+                    context.fillStyle = color ? color.toString() : "#000";
+            }
                     context.fillRect(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
                 }
             }
@@ -143,16 +189,26 @@
         }
 
         function nextColor(board, x, y) {
-            const cellColor = board.getColor(x, y);
+            const width = board.getWidth();
+            const height = board.getHeight();
+            const wrapChecked = document.getElementById('wrapCheckbox').checked;
+            const getWrappedColor = (x, y) => {
+                if (wrapChecked) {
+                    x = (x + width) % width;
+                    y = (y + height) % height;
+                }
+                return board.getColor(x, y);
+            };
+            const cellColor = getWrappedColor(x, y);
             const neighbours = [
-                board.getColor(x - 1, y - 1),
-                board.getColor(x - 1, y),
-                board.getColor(x - 1, y + 1),
-                board.getColor(x, y - 1),
-                board.getColor(x, y + 1),
-                board.getColor(x + 1, y - 1),
-                board.getColor(x + 1, y),
-                board.getColor(x + 1, y + 1)
+                getWrappedColor(x - 1, y - 1),
+                getWrappedColor(x - 1, y),
+                getWrappedColor(x - 1, y + 1),
+                getWrappedColor(x, y - 1),
+                getWrappedColor(x, y + 1),
+                getWrappedColor(x + 1, y - 1),
+                getWrappedColor(x + 1, y),
+                getWrappedColor(x + 1, y + 1)
             ];
             const aliveNeighbours = neighbours.filter(function (neighbour) {
                 return !!neighbour;
@@ -222,22 +278,117 @@
 
         resizeToMatch(board, bigCanvas)
 
-        setInterval(function () {
-            board = tick(board);
-            requestAnimationFrame(function () { render(board, context) });
-        }, 200);
-
         window.addEventListener('resize', function () {
             resizeToMatch(board, bigCanvas);
-            requestAnimationFrame(function () { render(board, context) });
+            requestAnimationFrame(function () { render(board, context, currentColorTheme) });
         });
 
-        bigCanvas.addEventListener('mousemove', function (event) {
+        let isPaused = false;
+        let isMouseDown = false;
+        let simulationInterval;
+
+        function startSimulation() {
+            simulationInterval = setInterval(function () {
+                if (!isPaused) {
+                    board = tick(board);
+                    requestAnimationFrame(function () { render(board, context, currentColorTheme) });
+                }
+            }, 2050 - speedInput.value);
+        }
+
+        function stopSimulation() {
+            clearInterval(simulationInterval);
+        }
+
+        function resetBoard() {
+            board = new Board(board.getWidth(), board.getHeight());
+            requestAnimationFrame(function () { render(board, context, currentColorTheme) });
+        }
+
+        function randomizeBoard() {
+            const width = board.getWidth();
+            const height = board.getHeight();
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    if (Math.random() < 0.5) {
+                        board.setColor(x, y, generateRainbowColor(Date.now()));
+                    } else {
+                        board.setColor(x, y, undefined);
+                    }
+                }
+            }
+            requestAnimationFrame(function () { render(board, context, currentColorTheme) });
+        }
+
+        const resetButton = document.getElementById('resetButton');
+        resetButton.addEventListener('click', function () {
+            resetBoard();
+        });
+
+        const randomButton = document.getElementById('randomButton');
+        randomButton.addEventListener('click', function () {
+            randomizeBoard();
+        });
+
+        const colorThemeSelect = document.getElementById('colorThemeSelect');
+        let currentColorTheme = 'colorOnBlack';
+
+        colorThemeSelect.addEventListener('change', function () {
+            currentColorTheme = colorThemeSelect.value;
+            requestAnimationFrame(function () { render(board, context, currentColorTheme) });
+        });
+
+        const pauseButton = document.getElementById('pauseButton');
+        pauseButton.addEventListener('click', function () {
+            isPaused = !isPaused;
+            pauseButton.textContent = isPaused ? 'Start' : 'Stop';
+            if (isPaused) {
+                stopSimulation();
+            } else {
+                startSimulation();
+            }
+        });
+
+        const stepButton = document.getElementById('stepButton');
+        stepButton.addEventListener('click', function () {
+            if (isPaused) {
+                board = tick(board);
+                requestAnimationFrame(function () { render(board, context, currentColorTheme) });
+            }
+        });
+
+        const speedInput = document.getElementById('speedInput');
+        speedInput.addEventListener('input', function () {
+            stopSimulation();
+            startSimulation();
+        });
+
+        const wrapCheckbox = document.getElementById('wrapCheckbox');
+        wrapCheckbox.addEventListener('change', function () {
+            requestAnimationFrame(function () { render(board, context, currentColorTheme) });
+        });
+
+        bigCanvas.addEventListener('mousedown', function (event) {
+            isMouseDown = true;
             const color = generateRainbowColor(Date.now());
             const x = Math.floor(event.clientX / pixelSize);
             const y = Math.floor(event.clientY / pixelSize);
             board.setColor(x, y, color);
-            requestAnimationFrame(function () { render(board, context) });
+            requestAnimationFrame(function () { render(board, context, currentColorTheme) });
+        });
+
+        bigCanvas.addEventListener('mousemove', function (event) {
+            if (isMouseDown) {
+                const color = generateRainbowColor(Date.now());
+                const x = Math.floor(event.clientX / pixelSize);
+                const y = Math.floor(event.clientY / pixelSize);
+                board.setColor(x, y, color);
+                requestAnimationFrame(function () { render(board, context, currentColorTheme) });
+            }
+        });
+
+        bigCanvas.addEventListener('mouseup', function () {
+            isMouseDown = false;
         });
 
         bigCanvas.addEventListener('touchmove', function (event) {
@@ -247,12 +398,13 @@
                 const y = Math.floor(touch.clientY / pixelSize);
                 board.setColor(x, y, color);
             });
-            requestAnimationFrame(function () { render(board, context) });
+            requestAnimationFrame(function () { render(board, context, currentColorTheme) });
         });
 
         // disable pinch to zoom for better multitouch
         document.addEventListener('gesturestart', function (e) { e.preventDefault() });
 
+        startSimulation();
     </script>
     
 </body>
