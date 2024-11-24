@@ -1,7 +1,7 @@
 <html>
 <head>
   
-  <title>Game of life </title>
+  <title>Game of Life v2.1.0</title>
 
   <style>
     body {
@@ -60,12 +60,64 @@
       margin-bottom: 7px;
     }
 
+    .dropdown-menu {
+        display: none;
+        position: absolute;
+        top: 60px; /* Adjust based on your layout */
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(250, 250, 250, 0.9);
+        padding: 10px;
+        border-radius: 10px;
+        max-height: 400px;
+        overflow-y: auto;
+        z-index: 1000;
+    }
+
+    .dropdown-menu h3 {
+        margin: 10px 0 5px;
+    }
+
+    .dropdown-menu ul {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 10px;
+    }
+
+    .dropdown-menu li {
+        margin: 5px 0;
+    }
+
+    .dropdown-menu button {
+        width: 100%;
+        text-align: left;
+        background: none;
+        border: none;
+        padding: 5px;
+        font-size: 14px;
+        cursor: pointer;
+    }
+
+    .dropdown-menu button:hover {
+        background: #e0e0e0;
+    }
+
+    #selectedPattern {
+        display: inline-block;
+        margin-left: 10px;
+    }
+
+    #selectedPattern button {
+        margin-left: 5px;
+    }
+
   </style>
 </head>
 <body>
     <canvas id="big-canvas"></canvas>
 
     <div class="controls">
+        <span>Game of Life v2.1.0</span>
         <a href='info.html'>info</a>
         <button id="pauseButton">Stop</button>
         <button id="stepButton">Step</button>
@@ -80,6 +132,20 @@
         </select>
         <input type="checkbox" id="wrapCheckbox" checked>
         <label for="wrapCheckbox">Wrap</label>
+        <button id="templateMenuButton">Templates</button>
+        <div id="templateMenu" class="dropdown-menu">
+            <h3>Oscillators</h3>
+            <ul id="oscillatorList"></ul>
+            <h3>Spaceships</h3>
+            <ul id="spaceshipList"></ul>
+            <h3>Methuselahs</h3>
+            <ul id="methuselahList"></ul>
+        </div>
+        <div id="selectedPattern">
+            Selected Pattern: <span id="selectedPatternName">None</span>
+            <button id="rotateButton">Rotate</button>
+            <button id="deselectButton">Deselect</button>
+        </div>
     </div>
 
     <script>
@@ -268,8 +334,6 @@
             );
         }
 
-        ////////////////////
-
         const bigCanvas = document.getElementById('big-canvas');
         const context = bigCanvas.getContext('2d');
         let board = new Board();
@@ -368,15 +432,19 @@
 
         bigCanvas.addEventListener('mousedown', function (event) {
             isMouseDown = true;
-            const color = generateRainbowColor(Date.now());
             const x = Math.floor(event.clientX / pixelSize);
             const y = Math.floor(event.clientY / pixelSize);
-            board.setColor(x, y, color);
+            if (selectedPattern) {
+                placePattern(x, y);
+            } else {
+                const color = generateRainbowColor(Date.now());
+                board.setColor(x, y, color);
+            }
             requestAnimationFrame(function () { render(board, context, currentColorTheme) });
         });
 
         bigCanvas.addEventListener('mousemove', function (event) {
-            if (isMouseDown) {
+            if (isMouseDown && !selectedPattern) {
                 const color = generateRainbowColor(Date.now());
                 const x = Math.floor(event.clientX / pixelSize);
                 const y = Math.floor(event.clientY / pixelSize);
@@ -389,20 +457,177 @@
             isMouseDown = false;
         });
 
-        bigCanvas.addEventListener('touchmove', function (event) {
-            const color = generateRainbowColor(Date.now());
-            Array.prototype.slice.call(event.touches).forEach(function (touch) {
-                const x = Math.floor(touch.clientX / pixelSize);
-                const y = Math.floor(touch.clientY / pixelSize);
+        bigCanvas.addEventListener('touchstart', function (event) {
+            isMouseDown = true;
+            const touch = event.touches[0];
+            const x = Math.floor(touch.clientX / pixelSize);
+            const y = Math.floor(touch.clientY / pixelSize);
+            if (selectedPattern) {
+                placePattern(x, y);
+            } else {
+                const color = generateRainbowColor(Date.now());
                 board.setColor(x, y, color);
-            });
+            }
             requestAnimationFrame(function () { render(board, context, currentColorTheme) });
+        });
+
+        bigCanvas.addEventListener('touchmove', function (event) {
+            if (!selectedPattern) {
+                const color = generateRainbowColor(Date.now());
+                Array.prototype.slice.call(event.touches).forEach(function (touch) {
+                    const x = Math.floor(touch.clientX / pixelSize);
+                    const y = Math.floor(touch.clientY / pixelSize);
+                    board.setColor(x, y, color);
+                });
+                requestAnimationFrame(function () { render(board, context, currentColorTheme) });
+            }
         });
 
         // disable pinch to zoom for better multitouch
         document.addEventListener('gesturestart', function (e) { e.preventDefault() });
 
+        const patterns = {
+            'Oscillators': {
+                'Blinker': [
+                    [0, -1], [0, 0], [0, 1]
+                ],
+                'Toad': [
+                    [-1, 0], [0, 0], [1, 0],
+                    [0, 1], [1, 1], [2, 1]
+                ],
+                'Beacon': [
+                    [0, 0], [1, 0], [0, 1],
+                    [3, 2], [2, 3], [3, 3]
+                ],
+                // Add more oscillators as desired
+            },
+            'Spaceships': {
+                'Glider': [
+                    [0, -1], [1, 0], [-1, 1], [0, 1], [1, 1]
+                ],
+                'Lightweight Spaceship': [
+                    [-1, 0], [0, 0], [1, 0], [2, 0],
+                    [-2, 1], [2, 1],
+                    [2, 2],
+                    [-2, 3], [1, 3]
+                ],
+                // Add more spaceships as desired
+            },
+            'Methuselahs': {
+                'R-pentomino': [
+                    [0, 0], [1, 0], [-1, 1], [0, 1], [0, 2]
+                ],
+                'Diehard': [
+                    [6, 0],
+                    [0, 1], [1, 1],
+                    [1, 2], [5, 2], [6, 2], [7, 2]
+                ],
+                // Add more methuselahs as desired
+            }
+        };
+        let selectedPattern = null;
+        let selectedPatternName = 'None';
+        let selectedPatternRotation = 0; // Rotation in degrees: 0, 90, 180, 270
+
+        function populatePatternMenu() {
+            const oscillatorList = document.getElementById('oscillatorList');
+            const spaceshipList = document.getElementById('spaceshipList');
+            const methuselahList = document.getElementById('methuselahList');
+            // Populate Oscillators
+            for (let patternName in patterns['Oscillators']) {
+                let li = document.createElement('li');
+                let button = document.createElement('button');
+                button.textContent = patternName;
+                button.addEventListener('click', function() {
+                    selectPattern('Oscillators', patternName);
+                });
+                li.appendChild(button);
+                oscillatorList.appendChild(li);
+            }
+            // Populate Spaceships
+            for (let patternName in patterns['Spaceships']) {
+                let li = document.createElement('li');
+                let button = document.createElement('button');
+                button.textContent = patternName;
+                button.addEventListener('click', function() {
+                    selectPattern('Spaceships', patternName);
+                });
+                li.appendChild(button);
+                spaceshipList.appendChild(li);
+            }
+            // Populate Methuselahs
+            for (let patternName in patterns['Methuselahs']) {
+                let li = document.createElement('li');
+                let button = document.createElement('button');
+                button.textContent = patternName;
+                button.addEventListener('click', function() {
+                    selectPattern('Methuselahs', patternName);
+                });
+                li.appendChild(button);
+                methuselahList.appendChild(li);
+            }
+        }
+
+        function selectPattern(category, patternName) {
+            selectedPattern = patterns[category][patternName];
+            selectedPatternName = patternName;
+            selectedPatternRotation = 0;
+            document.getElementById('selectedPatternName').textContent = patternName;
+
+            // Hide the template menu after selection
+            document.getElementById('templateMenu').style.display = 'none';
+        }
+
+        const rotateButton = document.getElementById('rotateButton');
+        rotateButton.addEventListener('click', function() {
+            selectedPatternRotation = (selectedPatternRotation + 90) % 360;
+        });
+
+        const deselectButton = document.getElementById('deselectButton');
+        deselectButton.addEventListener('click', function() {
+            selectedPattern = null;
+            selectedPatternName = 'None';
+            selectedPatternRotation = 0;
+            document.getElementById('selectedPatternName').textContent = 'None';
+        });
+
+        const templateMenuButton = document.getElementById('templateMenuButton');
+        templateMenuButton.addEventListener('click', function() {
+            const templateMenu = document.getElementById('templateMenu');
+            if (templateMenu.style.display === 'none' || templateMenu.style.display === '') {
+                templateMenu.style.display = 'block';
+            } else {
+                templateMenu.style.display = 'none';
+            }
+        });
+
+        function placePattern(x, y) {
+            const color = generateRainbowColor(Date.now());
+            // Apply rotation to the pattern
+            const rotatedPattern = selectedPattern.map(function(cell) {
+                let [dx, dy] = cell;
+                let angle = selectedPatternRotation;
+                if (angle === 90) {
+                    return [ -dy, dx ];
+                } else if (angle === 180) {
+                    return [ -dx, -dy ];
+                } else if (angle === 270) {
+                    return [ dy, -dx ];
+                } else {
+                    return [ dx, dy ];
+                }
+            });
+            rotatedPattern.forEach(function(offset) {
+                const cellX = x + offset[0];
+                const cellY = y + offset[1];
+                if (cellX >= 0 && cellX < board.getWidth() && cellY >= 0 && cellY < board.getHeight()) {
+                    board.setColor(cellX, cellY, color);
+                }
+            });
+        }
+
         startSimulation();
+        populatePatternMenu();
     </script>
     
 </body>
